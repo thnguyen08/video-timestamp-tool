@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Video Timestamp Overlay Tool</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a2e;
+      color: #eee;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      margin-bottom: 6px;
+      color: #fff;
+      letter-spacing: 1px;
+    }
+    .subtitle {
+      font-size: 0.85rem;
+      color: #aaa;
+      margin-bottom: 24px;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 14px;
+      padding: 22px 24px;
+      width: 100%;
+      max-width: 760px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.35);
+    }
+
+    .row {
+      display: flex;
+      gap: 14px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+      margin-bottom: 16px;
+    }
+
+    label {
+      font-size: 0.82rem;
+      color: #aaa;
+      display: block;
+      margin-bottom: 5px;
+    }
+
+    input[type="date"], input[type="text"], input[type="number"], select {
+      background: #0f3460;
+      border: 1.5px solid #264a8a;
+      color: #fff;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="date"]:focus, input[type="text"]:focus, input[type="number"]:focus, select:focus {
+      border-color: #e94560;
+    }
+
+    input[type="range"] {
+      accent-color: #e94560;
+    }
+
+    .upload-zone {
+      border: 2px dashed #264a8a;
+      border-radius: 12px;
+      padding: 30px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 16px;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: #e94560;
+      background: rgba(233,69,96,0.06);
+    }
+    .upload-zone .icon { font-size: 2rem; margin-bottom: 8px; }
+    .upload-zone p { font-size: 0.9rem; color: #aaa; }
+    .upload-zone strong { color: #e94560; }
+
+    #fileInput { display: none; }
+
+    .btn {
+      background: #e94560;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 0.95rem;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      font-weight: 600;
+    }
+    .btn:hover { background: #c73652; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { background: #555; cursor: not-allowed; }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid #e94560;
+      color: #e94560;
+    }
+    .btn-outline:hover { background: rgba(233,69,96,0.12); }
+
+    .canvas-wrap {
+      position: relative;
+      display: inline-block;
+      max-width: 100%;
+    }
+    canvas {
+      border-radius: 10px;
+      max-width: 100%;
+      display: block;
+    }
+
+    .hidden { display: none !important; }
+
+    .preview-section {
+      width: 100%;
+      max-width: 760px;
+      text-align: center;
+    }
+
+    .ts-preview {
+      font-family: 'Courier New', monospace;
+      font-size: 1.1rem;
+      background: #000;
+      color: #fff;
+      display: inline-block;
+      padding: 5px 14px;
+      border: 2px solid red;
+      border-radius: 4px;
+      margin-bottom: 16px;
+      letter-spacing: 1px;
+    }
+
+    .controls-row {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+
+    .progress-bar-wrap {
+      width: 100%;
+      height: 6px;
+      background: #264a8a;
+      border-radius: 3px;
+      overflow: hidden;
+      margin-top: 10px;
+    }
+    .progress-bar {
+      height: 100%;
+      background: #e94560;
+      width: 0%;
+      transition: width 0.1s;
+    }
+
+    .settings-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 14px;
+      margin-bottom: 4px;
+    }
+
+    .field { flex: 1; min-width: 140px; }
+
+    .info-box {
+      background: rgba(233,69,96,0.1);
+      border: 1px solid rgba(233,69,96,0.3);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.82rem;
+      color: #ddd;
+      margin-bottom: 16px;
+    }
+
+    .status {
+      font-size: 0.85rem;
+      color: #aaa;
+      text-align: center;
+      margin-top: 8px;
+      min-height: 20px;
+    }
+
+    @media (max-width: 500px) {
+      .settings-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>🎬 Video Timestamp Overlay</h1>
+<p class="subtitle">Thêm timestamp vào video — ngày tự chọn, giờ chạy thực tế</p>
+
+<!-- Upload -->
+<div class="card">
+  <div class="upload-zone" id="uploadZone">
+    <div class="icon">📁</div>
+    <p><strong>Nhấn để chọn video</strong> hoặc kéo thả vào đây</p>
+    <p style="margin-top:6px;font-size:0.78rem;">MP4, WebM, MOV, AVI... (xử lý cục bộ, không upload lên server)</p>
+  </div>
+  <input type="file" id="fileInput" accept="video/*" />
+
+  <!-- Settings -->
+  <div class="settings-grid">
+    <div class="field">
+      <label>📅 Ngày hiển thị</label>
+      <input type="date" id="dateInput" />
+    </div>
+    <div class="field">
+      <label>🕐 Giờ bắt đầu (tuỳ chọn)</label>
+      <input type="text" id="startTime" placeholder="HH:MM:SS" maxlength="8" style="width:100%;" />
+    </div>
+    <div class="field">
+      <label>📍 Vị trí</label>
+      <select id="positionSelect" style="width:100%;">
+        <option value="top-left">Trên trái</option>
+        <option value="top-right">Trên phải</option>
+        <option value="bottom-left">Dưới trái</option>
+        <option value="bottom-right">Dưới phải</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>🔡 Cỡ chữ (px)</label>
+      <input type="number" id="fontSize" value="22" min="10" max="80" style="width:100%;" />
+    </div>
+    <div class="field" style="grid-column: 1 / -1;">
+      <label>📦 Mã vận đơn (góc phải dưới, để trống nếu không cần)</label>
+      <input type="text" id="trackingCode" placeholder="Ví dụ: 861848881533" style="width:100%;" />
+    </div>
+  </div>
+</div>
+
+<!-- Preview -->
+<div class="preview-section" id="previewSection" style="display:none;">
+  <div class="card" style="padding:16px;">
+    <div style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+      <span style="font-size:0.9rem; color:#aaa;">Preview — timestamp live:</span>
+      <div class="ts-preview" id="tsPreview">2026-06-02 15:42:25</div>
+    </div>
+
+    <div class="canvas-wrap">
+      <canvas id="outputCanvas"></canvas>
+    </div>
+
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <div class="controls-row">
+      <button class="btn btn-outline" id="playBtn">▶ Play</button>
+      <button class="btn btn-outline" id="rewindBtn">⏮ Về đầu</button>
+      <button class="btn" id="exportBtn">⬇ Xuất Video (MP4)</button>
+    </div>
+
+    <div class="info-box" style="margin-top:14px; margin-bottom:0;">
+      💡 <strong>Ghi chú export:</strong> Video được render lại với timestamp được "đốt" (burn-in) vào từng frame. Thời gian export phụ thuộc vào độ dài và độ phân giải video.
+    </div>
+
+    <div class="status" id="statusMsg"></div>
+  </div>
+</div>
+
+<!-- hidden video element -->
+<video id="hiddenVideo" style="display:none;" crossorigin="anonymous"></video>
+
+<script>
+  // ---- State ----
+  let videoFile = null;
+  let videoEl = document.getElementById('hiddenVideo');
+  let canvas = document.getElementById('outputCanvas');
+  let ctx = canvas.getContext('2d');
+  let rafId = null;
+  let isPlaying = false;
+  let mediaRecorder = null;
+  let recordedChunks = [];
+
+  // Timestamp state
+  let tsStartWallClock = null;  // Date object: when video started playing
+  let tsStartSeconds = null;    // seconds offset at play start
+  let tsBaseDate = '';          // the user-chosen date string YYYY-MM-DD
+  let tsBaseTimeOffset = 0;     // seconds to add to the current video time
+
+  // ---- UI refs ----
+  const uploadZone = document.getElementById('uploadZone');
+  const fileInput = document.getElementById('fileInput');
+  const dateInput = document.getElementById('dateInput');
+  const startTimeInput = document.getElementById('startTime');
+  const positionSelect = document.getElementById('positionSelect');
+  const fontSizeInput = document.getElementById('fontSize');
+  const previewSection = document.getElementById('previewSection');
+  const playBtn = document.getElementById('playBtn');
+  const rewindBtn = document.getElementById('rewindBtn');
+  const exportBtn = document.getElementById('exportBtn');
+  const progressBar = document.getElementById('progressBar');
+  const statusMsg = document.getElementById('statusMsg');
+  const tsPreview = document.getElementById('tsPreview');
+
+  // ---- Default date = today ----
+  (function setDefaultDate() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    dateInput.value = `${y}-${m}-${d}`;
+  })();
+
+  // ---- Upload ----
+  uploadZone.addEventListener('click', () => fileInput.click());
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+  function loadFile(file) {
+    videoFile = file;
+    const url = URL.createObjectURL(file);
+    videoEl.src = url;
+    videoEl.load();
+    videoEl.onloadedmetadata = () => {
+      canvas.width = videoEl.videoWidth;
+      canvas.height = videoEl.videoHeight;
+      previewSection.style.display = '';
+      drawFrame();
+      setStatus(`Video: ${file.name} | ${videoEl.videoWidth}x${videoEl.videoHeight} | ${formatDuration(videoEl.duration)}`);
+    };
+  }
+
+  // ---- Timestamp helpers ----
+  function parseStartTime(str) {
+    if (!str || !str.trim()) return null;
+    const parts = str.trim().split(':').map(Number);
+    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
+    if (parts.length === 2) return parts[0]*3600 + parts[1]*60;
+    return null;
+  }
+
+  function getCurrentTimestamp() {
+    const date = dateInput.value || '----.--.--';
+    let seconds;
+
+    if (isPlaying && tsStartWallClock !== null) {
+      // Use elapsed wall-clock time from when we pressed play
+      const elapsed = (Date.now() - tsStartWallClock) / 1000;
+      seconds = tsBaseTimeOffset + elapsed;
+    } else {
+      // Paused: use video currentTime + base offset
+      const parsed = parseStartTime(startTimeInput.value);
+      const baseOff = (parsed !== null) ? parsed : 0;
+      seconds = baseOff + (videoEl.currentTime || 0);
+    }
+
+    const h = Math.floor(seconds / 3600) % 24;
+    const m = Math.floor(seconds / 60) % 60;
+    const s = Math.floor(seconds) % 60;
+    const hh = String(h).padStart(2, '0');
+    const mm = String(m).padStart(2, '0');
+    const ss = String(s).padStart(2, '0');
+    return `${date} ${hh}:${mm}:${ss}`;
+  }
+
+  function drawTimestamp(ctx, ts) {
+    const fontSize = parseInt(fontSizeInput.value) || 22;
+    const pos = positionSelect.value;
+    const padding = 10;
+    const marginX = fontSize * 0.6;
+    const marginY = fontSize * 0.6;
+
+    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
+    const metrics = ctx.measureText(ts);
+    const textW = metrics.width;
+    const textH = fontSize;
+    const boxW = textW + padding * 2 + 4;
+    const boxH = textH + padding * 2 - 4;
+
+    let x, y;
+    if (pos === 'top-left')    { x = marginX; y = marginY; }
+    if (pos === 'top-right')   { x = canvas.width - boxW - marginX; y = marginY; }
+    if (pos === 'bottom-left') { x = marginX; y = canvas.height - boxH - marginY; }
+    if (pos === 'bottom-right'){ x = canvas.width - boxW - marginX; y = canvas.height - boxH - marginY; }
+
+    // White text with thin black outline
+    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
+    ctx.textBaseline = 'top';
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = Math.max(2, fontSize * 0.12);
+    ctx.lineJoin = 'round';
+    ctx.strokeText(ts, x + padding + 2, y + padding - 2);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(ts, x + padding + 2, y + padding - 2);
+  }
+
+  function drawTrackingCode(ctx) {
+    const code = document.getElementById('trackingCode').value.trim();
+    if (!code) return;
+    const fontSize = Math.round((parseInt(fontSizeInput.value) || 22) * 1.05);
+    const padding = { x: 14, y: 7 };
+
+    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
+    const textW = ctx.measureText(code).width;
+    const boxW = textW + padding.x * 2;
+    const boxH = fontSize + padding.y * 2;
+    const x = canvas.width - boxW;
+    const y = canvas.height - boxH;
+
+    // Bright yellow background
+    ctx.fillStyle = '#FFD700';
+    ctx.fillRect(x, y, boxW, boxH);
+
+    // Black text
+    ctx.fillStyle = '#000000';
+    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
+    ctx.textBaseline = 'top';
+    ctx.fillText(code, x + padding.x, y + padding.y);
+  }
+
+  function drawFrame() {
+    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+    const ts = getCurrentTimestamp();
+    drawTimestamp(ctx, ts);
+    drawTrackingCode(ctx);
+    tsPreview.textContent = ts;
+    progressBar.style.width = videoEl.duration ? (videoEl.currentTime / videoEl.duration * 100) + '%' : '0%';
+  }
+
+  function renderLoop() {
+    drawFrame();
+    if (!videoEl.paused && !videoEl.ended) {
+      rafId = requestAnimationFrame(renderLoop);
+    } else {
+      isPlaying = false;
+      playBtn.textContent = '▶ Play';
+      tsStartWallClock = null;
+    }
+  }
+
+  // ---- Play/Pause ----
+  playBtn.addEventListener('click', () => {
+    if (videoEl.paused || videoEl.ended) {
+      // Record wall-clock start & current video time offset
+      const parsed = parseStartTime(startTimeInput.value);
+      const baseOff = (parsed !== null) ? parsed : 0;
+      tsBaseTimeOffset = baseOff + videoEl.currentTime;
+      tsStartWallClock = Date.now();
+
+      videoEl.play();
+      isPlaying = true;
+      playBtn.textContent = '⏸ Pause';
+      rafId = requestAnimationFrame(renderLoop);
+    } else {
+      videoEl.pause();
+      isPlaying = false;
+      playBtn.textContent = '▶ Play';
+      tsStartWallClock = null;
+      cancelAnimationFrame(rafId);
+      drawFrame();
+    }
+  });
+
+  videoEl.addEventListener('ended', () => {
+    isPlaying = false;
+    playBtn.textContent = '▶ Play';
+    tsStartWallClock = null;
+    drawFrame();
+  });
+
+  rewindBtn.addEventListener('click', () => {
+    videoEl.pause();
+    videoEl.currentTime = 0;
+    isPlaying = false;
+    playBtn.textContent = '▶ Play';
+    tsStartWallClock = null;
+    cancelAnimationFrame(rafId);
+    drawFrame();
+  });
+
+  // ---- Live update when settings change ----
+  dateInput.addEventListener('change', () => { if (!isPlaying) drawFrame(); });
+  startTimeInput.addEventListener('input', () => { if (!isPlaying) drawFrame(); });
+  positionSelect.addEventListener('change', () => { if (!isPlaying) drawFrame(); });
+  fontSizeInput.addEventListener('input', () => { if (!isPlaying) drawFrame(); });
+  document.getElementById('trackingCode').addEventListener('input', () => { if (!isPlaying) drawFrame(); });
+
+  // ---- Export dùng MediaRecorder (không bao giờ bị treo) ----
+  exportBtn.addEventListener('click', async () => {
+    if (!videoFile) return;
+
+    videoEl.pause();
+    cancelAnimationFrame(rafId);
+    isPlaying = false;
+    tsStartWallClock = null;
+    playBtn.textContent = '▶ Play';
+    exportBtn.disabled = true;
+    playBtn.disabled   = true;
+
+    // Chọn mime type tốt nhất có thể
+    const candidates = [
+      'video/mp4;codecs=avc1',
+      'video/mp4;codecs=h264',
+      'video/mp4',
+      'video/webm;codecs=vp9',
+      'video/webm;codecs=vp8',
+      'video/webm',
+    ];
+    const mimeType = candidates.find(t => MediaRecorder.isTypeSupported(t));
+    if (!mimeType) {
+      setStatus('⚠️ Trình duyệt không hỗ trợ xuất video. Vui lòng dùng Chrome.');
+      exportBtn.disabled = false; playBtn.disabled = false;
+      return;
+    }
+    const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
+
+    // Reset về đầu
+    videoEl.muted = true;
+    videoEl.currentTime = 0;
+    await new Promise(r => videoEl.addEventListener('seeked', r, { once: true }));
+
+    const parsed  = parseStartTime(startTimeInput.value);
+    const baseOff = (parsed !== null) ? parsed : 0;
+    const date    = dateInput.value || '----.--.--';
+
+    // Ghi canvas stream
+    const chunks  = [];
+    const stream  = canvas.captureStream(30);
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 10_000_000 });
+    recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+    // Vòng vẽ frame trong lúc export
+    function exportDraw() {
+      const videoTime = videoEl.currentTime;
+      const totalSec  = baseOff + videoTime;
+      const h = String(Math.floor(totalSec / 3600) % 24).padStart(2, '0');
+      const m = String(Math.floor(totalSec / 60)  % 60).padStart(2, '0');
+      const s = String(Math.floor(totalSec)        % 60).padStart(2, '0');
+      const ts = `${date} ${h}:${m}:${s}`;
+
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      drawTimestamp(ctx, ts);
+      drawTrackingCode(ctx);
+      tsPreview.textContent = ts;
+
+      const pct = videoEl.duration ? Math.round(videoTime / videoEl.duration * 100) : 0;
+      progressBar.style.width = pct + '%';
+      setStatus(`⏳ Đang xuất ${ext.toUpperCase()} — ${pct}%`);
+
+      if (!videoEl.ended && !videoEl.paused) {
+        rafId = requestAnimationFrame(exportDraw);
+      }
+    }
+
+    await new Promise(resolve => {
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: mimeType });
+        const url  = URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = `video_timestamp_${Date.now()}.${ext}`;
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        resolve();
+      };
+
+      videoEl.addEventListener('ended', () => {
+        cancelAnimationFrame(rafId);
+        recorder.stop();
+      }, { once: true });
+
+      recorder.start(200);
+      videoEl.playbackRate = 1; // giữ tốc độ gốc để video xuất ra đúng tốc độ
+      rafId = requestAnimationFrame(exportDraw);
+      videoEl.play();
+    });
+
+    videoEl.playbackRate = 1;
+    progressBar.style.width = '100%';
+    setStatus(`✅ Xuất ${ext.toUpperCase()} hoàn tất! File đã được tải xuống.`);
+    exportBtn.disabled = false;
+    playBtn.disabled   = false;
+  });
+
+  // ---- Utils ----
+  function formatDuration(s) {
+    const h = Math.floor(s/3600), m = Math.floor(s/60)%60, sec = Math.floor(s)%60;
+    return h > 0
+      ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}`
+      : `${m}:${String(sec).padStart(2,'0')}`;
+  }
+
+  function setStatus(msg) {
+    statusMsg.textContent = msg;
+  }
+
+  // Live clock update for preview even before video loads
+  setInterval(() => { if (!videoFile) { tsPreview.textContent = getCurrentTimestamp(); } }, 1000);
+</script>
+</body>
+</html>
