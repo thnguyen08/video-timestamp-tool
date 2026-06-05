@@ -378,33 +378,28 @@
 
   function drawTimestamp(ctx, ts) {
     const fontSize = parseInt(fontSizeInput.value) || 22;
-    const pos = positionSelect.value;
-    const padding = 10;
-    const marginX = fontSize * 0.6;
-    const marginY = fontSize * 0.6;
+    const pos      = positionSelect.value;
+    const margin   = Math.round(fontSize * 0.4); // sát mép hơn
 
-    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
-    const metrics = ctx.measureText(ts);
-    const textW = metrics.width;
+    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.textBaseline = 'top';
+    const textW = ctx.measureText(ts).width;
     const textH = fontSize;
-    const boxW = textW + padding * 2 + 4;
-    const boxH = textH + padding * 2 - 4;
 
     let x, y;
-    if (pos === 'top-left')    { x = marginX; y = marginY; }
-    if (pos === 'top-right')   { x = canvas.width - boxW - marginX; y = marginY; }
-    if (pos === 'bottom-left') { x = marginX; y = canvas.height - boxH - marginY; }
-    if (pos === 'bottom-right'){ x = canvas.width - boxW - marginX; y = canvas.height - boxH - marginY; }
+    if (pos === 'top-left')    { x = margin;                         y = margin; }
+    if (pos === 'top-right')   { x = canvas.width  - textW - margin; y = margin; }
+    if (pos === 'bottom-left') { x = margin;                         y = canvas.height - textH - margin; }
+    if (pos === 'bottom-right'){ x = canvas.width  - textW - margin; y = canvas.height - textH - margin; }
 
-    // White text with thin black outline
-    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
-    ctx.textBaseline = 'top';
+    // Viền đen dày
     ctx.strokeStyle = '#000000';
-    ctx.lineWidth = Math.max(2, fontSize * 0.12);
-    ctx.lineJoin = 'round';
-    ctx.strokeText(ts, x + padding + 2, y + padding - 2);
+    ctx.lineWidth   = Math.max(3, fontSize * 0.18);
+    ctx.lineJoin    = 'round';
+    ctx.strokeText(ts, x, y);
+    // Chữ trắng
     ctx.fillStyle = '#ffffff';
-    ctx.fillText(ts, x + padding + 2, y + padding - 2);
+    ctx.fillText(ts, x, y);
   }
 
   function drawTrackingCode(ctx) {
@@ -413,7 +408,7 @@
     const fontSize = Math.round((parseInt(fontSizeInput.value) || 22) * 1.05);
     const padding = { x: 14, y: 7 };
 
-    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
+    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
     const textW = ctx.measureText(code).width;
     const boxW = textW + padding.x * 2;
     const boxH = fontSize + padding.y * 2;
@@ -426,7 +421,7 @@
 
     // Black text
     ctx.fillStyle = '#000000';
-    ctx.font = `${fontSize}px Consolas, 'Lucida Console', 'Courier New', monospace`;
+    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
     ctx.textBaseline = 'top';
     ctx.fillText(code, x + padding.x, y + padding.y);
   }
