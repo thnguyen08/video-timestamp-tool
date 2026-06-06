@@ -621,9 +621,9 @@
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 10_000_000 });
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-    // Vòng vẽ frame trong lúc export
-    function exportDraw() {
-      const videoTime = videoEl.currentTime;
+    // Vẽ đúng khi video có frame mới (tránh duplicate frame)
+    function drawExportFrame(now, metadata) {
+      const videoTime = metadata ? metadata.mediaTime : videoEl.currentTime;
       const totalSec  = baseOff + videoTime;
       const h = String(Math.floor(totalSec / 3600) % 24).padStart(2, '0');
       const m = String(Math.floor(totalSec / 60)  % 60).padStart(2, '0');
@@ -640,8 +640,8 @@
       progressBar.style.width = pct + '%';
       setStatus(`⏳ Đang xuất ${ext.toUpperCase()} — ${pct}%`);
 
-      if (!videoEl.ended && !videoEl.paused) {
-        rafId = requestAnimationFrame(exportDraw);
+      if (!videoEl.ended) {
+        videoEl.requestVideoFrameCallback(drawExportFrame);
       }
     }
 
@@ -658,13 +658,13 @@
       };
 
       videoEl.addEventListener('ended', () => {
-        cancelAnimationFrame(rafId);
-        recorder.stop();
+        // Vẽ frame cuối rồi mới stop
+        setTimeout(() => recorder.stop(), 200);
       }, { once: true });
 
-      recorder.start(200);
-      videoEl.playbackRate = 1; // giữ tốc độ gốc để video xuất ra đúng tốc độ
-      rafId = requestAnimationFrame(exportDraw);
+      recorder.start(100);
+      videoEl.playbackRate = 1;
+      videoEl.requestVideoFrameCallback(drawExportFrame);
       videoEl.play();
     });
 
