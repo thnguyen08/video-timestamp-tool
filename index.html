@@ -246,7 +246,7 @@
         <button class="btn btn-outline" id="addUserBtn" style="padding:7px 14px; font-size:0.85rem; white-space:nowrap;">+ Thêm</button>
         <button class="btn btn-outline" id="delUserBtn" style="padding:7px 14px; font-size:0.85rem; white-space:nowrap; border-color:#888; color:#888;">🗑</button>
       </div>
-      <input type="text" id="packerName" placeholder="Tên user đang chọn" style="width:100%; margin-top:7px;" readonly />
+      <input type="text" id="packerName" placeholder="Chọn từ danh sách hoặc điền tay" style="width:100%; margin-top:7px;" />
     </div>
     <div class="field">
       <label>📦 Mã vận đơn (góc phải dưới)</label>
@@ -575,6 +575,7 @@
     if (!isPlaying) drawFrame();
   });
 
+  packerName.addEventListener('input', () => { if (!isPlaying) drawFrame(); });
   document.getElementById('trackingCode').addEventListener('input', () => { if (!isPlaying) drawFrame(); });
 
   // ---- Export dùng MediaRecorder (không bao giờ bị treo) ----
