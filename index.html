@@ -238,7 +238,18 @@
       <input type="number" id="fontSize" value="22" min="10" max="80" style="width:100%;" />
     </div>
     <div class="field" style="grid-column: 1 / -1;">
-      <label>📦 Mã vận đơn (góc phải dưới, để trống nếu không cần)</label>
+      <label>👤 Tên/ID người đóng gói (góc trái dưới)</label>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <select id="packerSelect" style="flex:1;">
+          <option value="">-- Chọn user --</option>
+        </select>
+        <button class="btn btn-outline" id="addUserBtn" style="padding:7px 14px; font-size:0.85rem; white-space:nowrap;">+ Thêm</button>
+        <button class="btn btn-outline" id="delUserBtn" style="padding:7px 14px; font-size:0.85rem; white-space:nowrap; border-color:#888; color:#888;">🗑</button>
+      </div>
+      <input type="text" id="packerName" placeholder="Tên user đang chọn" style="width:100%; margin-top:7px;" readonly />
+    </div>
+    <div class="field">
+      <label>📦 Mã vận đơn (góc phải dưới)</label>
       <input type="text" id="trackingCode" placeholder="Ví dụ: 861848881533" style="width:100%;" />
     </div>
   </div>
@@ -381,7 +392,7 @@
     const pos      = positionSelect.value;
     const margin   = Math.round(fontSize * 0.4); // sát mép hơn
 
-    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.font         = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
     ctx.textBaseline = 'top';
     const textW = ctx.measureText(ts).width;
     const textH = fontSize;
@@ -392,36 +403,53 @@
     if (pos === 'bottom-left') { x = margin;                         y = canvas.height - textH - margin; }
     if (pos === 'bottom-right'){ x = canvas.width  - textW - margin; y = canvas.height - textH - margin; }
 
-    // Viền đen dày
-    ctx.strokeStyle = '#000000';
-    ctx.lineWidth   = Math.max(3, fontSize * 0.18);
+    // Vẽ viền đen mỏng trước, chữ trắng sau
     ctx.lineJoin    = 'round';
-    ctx.strokeText(ts, x, y);
-    // Chữ trắng
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(ts, x, y);
+    ctx.lineWidth   = Math.max(3, fontSize * 0.16);
+    ctx.strokeStyle = '#000000';
+    ctx.strokeText(ts, Math.round(x), Math.round(y));
+    ctx.fillStyle   = '#ffffff';
+    ctx.fillText(ts, Math.round(x), Math.round(y));
+  }
+
+  function drawPackerName(ctx) {
+    const name = document.getElementById('packerName').value.trim();
+    if (!name) return;
+    const fontSize = parseInt(fontSizeInput.value) || 22;
+    const margin   = Math.round(fontSize * 0.4);
+    const x = margin;
+    const y = canvas.height - fontSize - margin;
+
+    ctx.font         = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.lineJoin     = 'round';
+    ctx.lineWidth    = Math.max(3, fontSize * 0.16);
+    ctx.strokeStyle  = '#000000';
+    ctx.strokeText(name, Math.round(x), Math.round(y));
+    ctx.fillStyle    = '#ffffff';
+    ctx.fillText(name, Math.round(x), Math.round(y));
   }
 
   function drawTrackingCode(ctx) {
     const code = document.getElementById('trackingCode').value.trim();
     if (!code) return;
     const fontSize = Math.round((parseInt(fontSizeInput.value) || 22) * 1.05);
-    const padding = { x: 14, y: 7 };
+    const padding = { x: 10, y: 5 };
 
-    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.font = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
     const textW = ctx.measureText(code).width;
     const boxW = textW + padding.x * 2;
     const boxH = fontSize + padding.y * 2;
     const x = canvas.width - boxW;
     const y = canvas.height - boxH;
 
-    // Bright yellow background
-    ctx.fillStyle = '#FFD700';
+    // Yellow như camera thật
+    ctx.fillStyle = '#FFEE00';
     ctx.fillRect(x, y, boxW, boxH);
 
     // Black text
     ctx.fillStyle = '#000000';
-    ctx.font = `bold ${fontSize}px Arial, Helvetica, sans-serif`;
+    ctx.font = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
     ctx.textBaseline = 'top';
     ctx.fillText(code, x + padding.x, y + padding.y);
   }
@@ -430,6 +458,7 @@
     ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     const ts = getCurrentTimestamp();
     drawTimestamp(ctx, ts);
+    drawPackerName(ctx);
     drawTrackingCode(ctx);
     tsPreview.textContent = ts;
     progressBar.style.width = videoEl.duration ? (videoEl.currentTime / videoEl.duration * 100) + '%' : '0%';
@@ -491,6 +520,61 @@
   startTimeInput.addEventListener('input', () => { if (!isPlaying) drawFrame(); });
   positionSelect.addEventListener('change', () => { if (!isPlaying) drawFrame(); });
   fontSizeInput.addEventListener('input', () => { if (!isPlaying) drawFrame(); });
+  // ---- Quản lý danh sách user ----
+  const packerSelect = document.getElementById('packerSelect');
+  const packerName   = document.getElementById('packerName');
+  const addUserBtn   = document.getElementById('addUserBtn');
+  const delUserBtn   = document.getElementById('delUserBtn');
+
+  function loadUsers() {
+    return JSON.parse(localStorage.getItem('packerUsers') || '[]');
+  }
+  function saveUsers(list) {
+    localStorage.setItem('packerUsers', JSON.stringify(list));
+  }
+  function renderUserList() {
+    const users = loadUsers();
+    const cur   = packerSelect.value;
+    packerSelect.innerHTML = '<option value="">-- Chọn user --</option>';
+    users.forEach(u => {
+      const opt = document.createElement('option');
+      opt.value = u; opt.textContent = u;
+      if (u === cur) opt.selected = true;
+      packerSelect.appendChild(opt);
+    });
+  }
+
+  renderUserList();
+
+  packerSelect.addEventListener('change', () => {
+    packerName.value = packerSelect.value;
+    if (!isPlaying) drawFrame();
+  });
+
+  addUserBtn.addEventListener('click', () => {
+    const name = prompt('Nhập tên/ID user mới:');
+    if (!name || !name.trim()) return;
+    const users = loadUsers();
+    if (users.includes(name.trim())) { alert('User đã tồn tại!'); return; }
+    users.push(name.trim());
+    saveUsers(users);
+    renderUserList();
+    packerSelect.value = name.trim();
+    packerName.value   = name.trim();
+    if (!isPlaying) drawFrame();
+  });
+
+  delUserBtn.addEventListener('click', () => {
+    const val = packerSelect.value;
+    if (!val) return;
+    if (!confirm(`Xoá user "${val}"?`)) return;
+    const users = loadUsers().filter(u => u !== val);
+    saveUsers(users);
+    renderUserList();
+    packerName.value = '';
+    if (!isPlaying) drawFrame();
+  });
+
   document.getElementById('trackingCode').addEventListener('input', () => { if (!isPlaying) drawFrame(); });
 
   // ---- Export dùng MediaRecorder (không bao giờ bị treo) ----
@@ -548,6 +632,7 @@
 
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
       drawTimestamp(ctx, ts);
+      drawPackerName(ctx);
       drawTrackingCode(ctx);
       tsPreview.textContent = ts;
 
