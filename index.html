@@ -235,7 +235,7 @@
     </div>
     <div class="field">
       <label>🔡 Cỡ chữ (px)</label>
-      <input type="number" id="fontSize" value="22" min="10" max="80" style="width:100%;" />
+      <input type="number" id="fontSize" value="28" min="10" max="80" style="width:100%;" />
     </div>
     <div class="field" style="grid-column: 1 / -1;">
       <label>👤 Tên/ID người đóng gói (góc trái dưới)</label>
@@ -392,8 +392,9 @@
     const pos      = positionSelect.value;
     const margin   = Math.round(fontSize * 0.4); // sát mép hơn
 
-    ctx.font         = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
-    ctx.textBaseline = 'top';
+    ctx.font          = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.letterSpacing = '2px';
+    ctx.textBaseline  = 'top';
     const textW = ctx.measureText(ts).width;
     const textH = fontSize;
 
@@ -408,8 +409,9 @@
     ctx.lineWidth   = Math.max(3, fontSize * 0.16);
     ctx.strokeStyle = '#000000';
     ctx.strokeText(ts, Math.round(x), Math.round(y));
-    ctx.fillStyle   = '#ffffff';
+    ctx.fillStyle     = '#ffffff';
     ctx.fillText(ts, Math.round(x), Math.round(y));
+    ctx.letterSpacing = '0px';
   }
 
   function drawPackerName(ctx) {
@@ -420,14 +422,16 @@
     const x = margin;
     const y = canvas.height - fontSize - margin;
 
-    ctx.font         = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
-    ctx.textBaseline = 'top';
-    ctx.lineJoin     = 'round';
-    ctx.lineWidth    = Math.max(3, fontSize * 0.16);
-    ctx.strokeStyle  = '#000000';
+    ctx.font          = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.letterSpacing = '2px';
+    ctx.textBaseline  = 'top';
+    ctx.lineJoin      = 'round';
+    ctx.lineWidth     = Math.max(3, fontSize * 0.16);
+    ctx.strokeStyle   = '#000000';
     ctx.strokeText(name, Math.round(x), Math.round(y));
-    ctx.fillStyle    = '#ffffff';
+    ctx.fillStyle     = '#ffffff';
     ctx.fillText(name, Math.round(x), Math.round(y));
+    ctx.letterSpacing = '0px';
   }
 
   function drawTrackingCode(ctx) {
@@ -436,7 +440,7 @@
     const fontSize = Math.round((parseInt(fontSizeInput.value) || 22) * 1.05);
     const padding = { x: 10, y: 5 };
 
-    ctx.font = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.font = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
     const textW = ctx.measureText(code).width;
     const boxW = textW + padding.x * 2;
     const boxH = fontSize + padding.y * 2;
@@ -449,7 +453,7 @@
 
     // Black text
     ctx.fillStyle = '#000000';
-    ctx.font = `300 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.font = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
     ctx.textBaseline = 'top';
     ctx.fillText(code, x + padding.x, y + padding.y);
   }
@@ -616,10 +620,10 @@
     const baseOff = (parsed !== null) ? parsed : 0;
     const date    = dateInput.value || '----.--.--';
 
-    // Ghi canvas stream
+    // Ghi canvas stream — giữ chất lượng cao
     const chunks  = [];
     const stream  = canvas.captureStream(30);
-    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 10_000_000 });
+    const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
     // Vẽ đúng khi video có frame mới (tránh duplicate frame)
@@ -648,13 +652,19 @@
 
     await new Promise(resolve => {
       recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: mimeType });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `video_timestamp_${Date.now()}.${ext}`;
+        const blob   = new Blob(chunks, { type: mimeType });
+        const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+        const url    = URL.createObjectURL(blob);
+        const a      = document.createElement('a');
+        a.href       = url;
+        a.download   = `video_timestamp_${Date.now()}.${ext}`;
         a.click();
         setTimeout(() => URL.revokeObjectURL(url), 10_000);
+        if (blob.size > 20 * 1024 * 1024) {
+          setStatus(`✅ Xuất xong! Kích thước: ${sizeMB} MB ⚠️ Vượt 20MB — video quá dài, hãy cắt ngắn lại.`);
+        } else {
+          setStatus(`✅ Xuất xong! Kích thước: ${sizeMB} MB`);
+        }
         resolve();
       };
 
@@ -663,6 +673,7 @@
         setTimeout(() => recorder.stop(), 200);
       }, { once: true });
 
+      setStatus(`⏳ Đang xuất ${ext.toUpperCase()} — 0%`);
       recorder.start(100);
       videoEl.playbackRate = 1;
       videoEl.requestVideoFrameCallback(drawExportFrame);
