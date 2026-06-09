@@ -392,7 +392,7 @@
     const pos      = positionSelect.value;
     const margin   = Math.round(fontSize * 0.4); // sát mép hơn
 
-    ctx.font          = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.font          = `normal ${fontSize}px Tahoma, Verdana, sans-serif`;
     ctx.letterSpacing = '2px';
     ctx.textBaseline  = 'top';
     const textW = ctx.measureText(ts).width;
@@ -404,13 +404,26 @@
     if (pos === 'bottom-left') { x = margin;                         y = canvas.height - textH - margin; }
     if (pos === 'bottom-right'){ x = canvas.width  - textW - margin; y = canvas.height - textH - margin; }
 
-    // Vẽ viền đen mỏng trước, chữ trắng sau
+    // Dùng scale để chữ mảnh hơn
+    ctx.save();
+    ctx.scale(0.85, 1);
+    const sx = Math.round(x / 0.85);
+    // Stroke không shadow → viền đen đều
+    ctx.shadowColor   = 'transparent';
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     ctx.lineJoin    = 'round';
-    ctx.lineWidth   = Math.max(3, fontSize * 0.16);
-    ctx.strokeStyle = '#000000';
-    ctx.strokeText(ts, Math.round(x), Math.round(y));
-    ctx.fillStyle     = '#ffffff';
-    ctx.fillText(ts, Math.round(x), Math.round(y));
+    ctx.lineWidth   = Math.max(4, fontSize * 0.18);
+    ctx.strokeStyle = 'black';
+    ctx.strokeText(ts, sx, Math.round(y));
+    ctx.fillStyle   = '#ffffff';
+    ctx.fillText(ts, sx, Math.round(y));
+    ctx.restore();
+    ctx.shadowColor   = 'transparent';
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     ctx.letterSpacing = '0px';
   }
 
@@ -422,15 +435,28 @@
     const x = margin;
     const y = canvas.height - fontSize - margin;
 
-    ctx.font          = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.font          = `normal ${fontSize}px Tahoma, Verdana, sans-serif`;
     ctx.letterSpacing = '2px';
     ctx.textBaseline  = 'top';
-    ctx.lineJoin      = 'round';
-    ctx.lineWidth     = Math.max(3, fontSize * 0.16);
-    ctx.strokeStyle   = '#000000';
-    ctx.strokeText(name, Math.round(x), Math.round(y));
-    ctx.fillStyle     = '#ffffff';
-    ctx.fillText(name, Math.round(x), Math.round(y));
+    ctx.save();
+    ctx.scale(0.85, 1);
+    const sx = Math.round(x / 0.85);
+    // Stroke không shadow → viền đen đều
+    ctx.shadowColor   = 'transparent';
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.lineJoin    = 'round';
+    ctx.lineWidth   = Math.max(4, fontSize * 0.18);
+    ctx.strokeStyle = 'black';
+    ctx.strokeText(name, sx, Math.round(y));
+    ctx.fillStyle   = '#ffffff';
+    ctx.fillText(name, sx, Math.round(y));
+    ctx.restore();
+    ctx.shadowColor   = 'transparent';
+    ctx.shadowBlur    = 0;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
     ctx.letterSpacing = '0px';
   }
 
@@ -440,7 +466,7 @@
     const fontSize = Math.round((parseInt(fontSizeInput.value) || 22) * 1.05);
     const padding = { x: 10, y: 5 };
 
-    ctx.font = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.font = `normal ${fontSize}px Tahoma, Verdana, sans-serif`;
     const textW = ctx.measureText(code).width;
     const boxW = textW + padding.x * 2;
     const boxH = fontSize + padding.y * 2;
@@ -453,7 +479,7 @@
 
     // Black text
     ctx.fillStyle = '#000000';
-    ctx.font = `250 ${fontSize}px "Arial Narrow", "Helvetica Neue", Arial, sans-serif`;
+    ctx.font = `normal ${fontSize}px Tahoma, Verdana, sans-serif`;
     ctx.textBaseline = 'top';
     ctx.fillText(code, x + padding.x, y + padding.y);
   }
