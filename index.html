@@ -235,7 +235,7 @@
     </div>
     <div class="field">
       <label>🔡 Cỡ chữ (px)</label>
-      <input type="number" id="fontSize" value="28" min="10" max="80" style="width:100%;" />
+      <input type="number" id="fontSize" value="24" min="10" max="80" style="width:100%;" />
     </div>
     <div class="field" style="grid-column: 1 / -1;">
       <label>👤 Tên/ID người đóng gói (góc trái dưới)</label>
@@ -392,8 +392,8 @@
     const pos      = positionSelect.value;
     const margin   = Math.round(fontSize * 0.4); // sát mép hơn
 
-    ctx.font          = `normal ${fontSize}px Tahoma, Verdana, sans-serif`;
-    ctx.letterSpacing = '2px';
+    ctx.font          = `400 ${fontSize}px Verdana, sans-serif`;
+    ctx.letterSpacing = '0.5px';
     ctx.textBaseline  = 'top';
     const textW = ctx.measureText(ts).width;
     const textH = fontSize;
@@ -404,21 +404,20 @@
     if (pos === 'bottom-left') { x = margin;                         y = canvas.height - textH - margin; }
     if (pos === 'bottom-right'){ x = canvas.width  - textW - margin; y = canvas.height - textH - margin; }
 
-    // Dùng scale để chữ mảnh hơn
     ctx.save();
-    ctx.scale(0.85, 1);
-    const sx = Math.round(x / 0.85);
-    // Stroke không shadow → viền đen đều
+    ctx.scale(1.08, 1.06);
+    const sx = Math.round(x / 1.08);
+    const sy = Math.round(y / 1.06);
+    ctx.lineJoin      = 'round';
     ctx.shadowColor   = 'transparent';
     ctx.shadowBlur    = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineJoin    = 'round';
-    ctx.lineWidth   = Math.max(4, fontSize * 0.18);
+    ctx.lineWidth   = Math.max(2, fontSize * 0.18);
     ctx.strokeStyle = 'black';
-    ctx.strokeText(ts, sx, Math.round(y));
+    ctx.strokeText(ts, sx, sy);
     ctx.fillStyle   = '#ffffff';
-    ctx.fillText(ts, sx, Math.round(y));
+    ctx.fillText(ts, sx, sy);
     ctx.restore();
     ctx.shadowColor   = 'transparent';
     ctx.shadowBlur    = 0;
@@ -435,23 +434,23 @@
     const x = margin;
     const y = canvas.height - fontSize - margin;
 
-    ctx.font          = `normal ${fontSize}px Tahoma, Verdana, sans-serif`;
-    ctx.letterSpacing = '2px';
+    ctx.font          = `400 ${fontSize}px Verdana, sans-serif`;
+    ctx.letterSpacing = '0.5px';
     ctx.textBaseline  = 'top';
     ctx.save();
-    ctx.scale(0.85, 1);
-    const sx = Math.round(x / 0.85);
-    // Stroke không shadow → viền đen đều
+    ctx.scale(1.08, 1.06);
+    const snx = Math.round(x / 1.08);
+    const sny = Math.round(y / 1.06);
+    ctx.lineJoin      = 'round';
     ctx.shadowColor   = 'transparent';
     ctx.shadowBlur    = 0;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    ctx.lineJoin    = 'round';
-    ctx.lineWidth   = Math.max(4, fontSize * 0.18);
+    ctx.lineWidth   = Math.max(2, fontSize * 0.18);
     ctx.strokeStyle = 'black';
-    ctx.strokeText(name, sx, Math.round(y));
+    ctx.strokeText(name, snx, sny);
     ctx.fillStyle   = '#ffffff';
-    ctx.fillText(name, sx, Math.round(y));
+    ctx.fillText(name, snx, sny);
     ctx.restore();
     ctx.shadowColor   = 'transparent';
     ctx.shadowBlur    = 0;
