@@ -6,7 +6,7 @@
   <title>Video Timestamp Overlay Tool</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto+Mono:wght@400&display=swap" rel="stylesheet" />
   <style>
     :root {
       --bg: #0f172a;
@@ -90,6 +90,7 @@
     }
 
     input, select, button { font: inherit; }
+
 
     input, select {
       width: 100%;
@@ -280,7 +281,7 @@
         </div>
         <div>
           <label>🔡 Cỡ chữ (px)</label>
-          <input type="number" id="fontSize" value="24" min="10" max="80" />
+          <input type="number" id="fontSize" value="20" min="10" max="80" />
         </div>
       </div>
 
@@ -337,6 +338,7 @@
   let ctx       = canvas.getContext('2d');
   let rafId     = null;
   let isPlaying = false;
+
 
   let tsStartWallClock = null;
   let tsBaseTimeOffset = 0;
@@ -417,8 +419,8 @@
     const pos    = positionSelect.value;
     const margin = Math.round(fontSize * 0.4);
 
-    ctx.font          = `400 ${fontSize}px Verdana, sans-serif`;
-    ctx.letterSpacing = '0.5px';
+    ctx.font          = `300 ${fontSize}px Tahoma, Verdana, sans-serif`;
+    ctx.letterSpacing = '2.0px';
     ctx.textBaseline  = 'top';
     const textW = ctx.measureText(ts).width;
     const textH = fontSize;
@@ -430,14 +432,13 @@
     if (pos === 'bottom-right') { x = canvas.width - textW - margin; y = canvas.height - textH - margin; }
 
     ctx.save();
-    ctx.scale(1.08, 1.06);
     ctx.lineJoin      = 'round';
     ctx.shadowColor   = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-    ctx.lineWidth     = Math.max(2, fontSize * 0.18);
+    ctx.lineWidth     = Math.max(3, fontSize * 0.2);
     ctx.strokeStyle   = 'black';
-    ctx.strokeText(ts, Math.round(x/1.08), Math.round(y/1.06));
+    ctx.strokeText(ts, x, y);
     ctx.fillStyle     = '#ffffff';
-    ctx.fillText(ts,  Math.round(x/1.08), Math.round(y/1.06));
+    ctx.fillText(ts,  x, y);
     ctx.restore();
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     ctx.letterSpacing = '0px';
@@ -451,18 +452,17 @@
     const x = margin;
     const y = canvas.height - fontSize - margin;
 
-    ctx.font          = `400 ${fontSize}px Verdana, sans-serif`;
-    ctx.letterSpacing = '0.5px';
+    ctx.font          = `300 ${fontSize}px Tahoma, Verdana, sans-serif`;
+    ctx.letterSpacing = '2.0px';
     ctx.textBaseline  = 'top';
     ctx.save();
-    ctx.scale(1.08, 1.06);
     ctx.lineJoin    = 'round';
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
-    ctx.lineWidth   = Math.max(2, fontSize * 0.18);
+    ctx.lineWidth   = Math.max(3, fontSize * 0.2);
     ctx.strokeStyle = 'black';
-    ctx.strokeText(name, Math.round(x/1.08), Math.round(y/1.06));
+    ctx.strokeText(name, x, y);
     ctx.fillStyle   = '#ffffff';
-    ctx.fillText(name, Math.round(x/1.08), Math.round(y/1.06));
+    ctx.fillText(name, x, y);
     ctx.restore();
     ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
     ctx.letterSpacing = '0px';
@@ -601,13 +601,17 @@
     isPlaying = false; tsStartWallClock = null; playBtn.textContent = '▶ Play';
     exportBtn.disabled = true; playBtn.disabled = true;
 
-    const candidates = ['video/mp4;codecs=avc1','video/mp4;codecs=h264','video/mp4','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
-    const mimeType = candidates.find(t => MediaRecorder.isTypeSupported(t));
+    // Thử native MP4 trước, nếu không được thì dùng WebM + FFmpeg convert
+    const nativeMp4 = ['video/mp4;codecs=avc1.42E01E','video/mp4;codecs=avc1','video/mp4;codecs=h264','video/mp4']
+                        .find(t => MediaRecorder.isTypeSupported(t));
+    const webmType  = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm']
+                        .find(t => MediaRecorder.isTypeSupported(t));
+    const mimeType  = nativeMp4 || webmType;
+
     if (!mimeType) {
       setStatus('⚠️ Trình duyệt không hỗ trợ xuất video. Vui lòng dùng Chrome.');
       exportBtn.disabled = false; playBtn.disabled = false; return;
     }
-    const ext = mimeType.startsWith('video/mp4') ? 'mp4' : 'webm';
 
     videoEl.muted = true; videoEl.currentTime = 0;
     await new Promise(r => videoEl.addEventListener('seeked', r, { once: true }));
@@ -621,6 +625,8 @@
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
+    let exportPct = 0;
+
     function drawExportFrame(now, metadata) {
       const videoTime = metadata ? metadata.mediaTime : videoEl.currentTime;
       const totalSec  = baseOff + videoTime;
@@ -631,36 +637,90 @@
       ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
       drawTimestamp(ctx, ts); drawPackerName(ctx); drawTrackingCode(ctx);
       tsPreview.textContent = ts;
-      const pct = videoEl.duration ? Math.round(videoTime / videoEl.duration * 100) : 0;
-      progressBar.style.width = pct + '%';
-      setStatus(`⏳ Đang xuất ${ext.toUpperCase()} — ${pct}%`);
       if (!videoEl.ended) videoEl.requestVideoFrameCallback(drawExportFrame);
     }
 
-    await new Promise(resolve => {
-      recorder.onstop = () => {
-        const blob   = new Blob(chunks, { type: mimeType });
-        const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
-        const url    = URL.createObjectURL(blob);
-        const a      = document.createElement('a');
-        a.href = url; a.download = `video_timestamp_${Date.now()}.${ext}`; a.click();
-        setTimeout(() => URL.revokeObjectURL(url), 10_000);
-        setStatus(blob.size > 20*1024*1024
-          ? `✅ Xuất xong! ${sizeMB} MB ⚠️ Vượt 20MB — video quá dài, hãy cắt ngắn.`
-          : `✅ Xuất xong! ${sizeMB} MB`);
-        resolve();
-      };
+    const videoDur = videoEl.duration; // giây
+    const recordedBlob = await new Promise(resolve => {
+      recorder.onstop = () => { clearInterval(uiTimer); resolve(new Blob(chunks, { type: mimeType })); };
       videoEl.addEventListener('ended', () => setTimeout(() => recorder.stop(), 200), { once: true });
-      setStatus(`⏳ Đang xuất ${ext.toUpperCase()} — 0%`);
+
+      setStatus('⏳ Đang render — 0%');
+      const startMs = Date.now();
+      const uiTimer = setInterval(() => {
+        const elapsedSec = (Date.now() - startMs) / 1000;
+        if (isFinite(videoDur) && videoDur > 0) {
+          // Duration hợp lệ → hiện %
+          const pct = Math.min(99, Math.round(elapsedSec / videoDur * 100));
+          progressBar.style.width = pct + '%';
+          setStatus(`⏳ Đang render — ${pct}%`);
+        } else {
+          // Duration là Infinity hoặc NaN → hiện số giây
+          progressBar.style.width = '50%'; // giả định giữa chừng
+          setStatus(`⏳ Đang render — ${Math.floor(elapsedSec)}s`);
+        }
+      }, 200);
+
       recorder.start(100); videoEl.playbackRate = 1;
       videoEl.requestVideoFrameCallback(drawExportFrame);
       videoEl.play();
     });
 
-    videoEl.playbackRate = 1;
     progressBar.style.width = '100%';
+    videoEl.playbackRate = 1;
+
+    if (nativeMp4) {
+      // Browser hỗ trợ MP4 trực tiếp
+      downloadBlob(recordedBlob, 'mp4');
+    } else {
+      // Convert WebM → MP4 bằng FFmpeg.wasm
+      try {
+        setStatus('⏳ Đang tải FFmpeg...');
+        const ff = await loadFFmpeg();
+        setStatus('⏳ Đang chuyển đổi sang MP4...');
+        const buf = await recordedBlob.arrayBuffer();
+        ff.FS('writeFile', 'input.webm', new Uint8Array(buf));
+        await ff.run('-i','input.webm','-c:v','libx264','-preset','ultrafast','-crf','23','-movflags','+faststart','-c:a','aac','output.mp4');
+        const data = ff.FS('readFile', 'output.mp4');
+        ff.FS('unlink','input.webm'); ff.FS('unlink','output.mp4');
+        downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), 'mp4');
+      } catch(e) {
+        setStatus('❌ Lỗi chuyển đổi MP4: ' + e.message);
+        exportBtn.disabled = false; playBtn.disabled = false; return;
+      }
+    }
+
     exportBtn.disabled = false; playBtn.disabled = false;
   });
+
+  async function loadFFmpeg() {
+    if (window._ff) return window._ff;
+    await new Promise((res, rej) => {
+      const s = document.createElement('script');
+      s.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.12/dist/ffmpeg.min.js';
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    const { createFFmpeg } = window.FFmpeg;
+    const ff = createFFmpeg({
+      log: false,
+      corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+    });
+    await ff.load();
+    window._ff = ff;
+    return ff;
+  }
+
+  function downloadBlob(blob, ext) {
+    const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = `video_timestamp_${Date.now()}.${ext}`; a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    setStatus(blob.size > 20*1024*1024
+      ? `✅ Xuất xong! ${sizeMB} MB ⚠️ Vượt 20MB — video quá dài, hãy cắt ngắn.`
+      : `✅ Xuất xong! ${sizeMB} MB`);
+  }
 
   function formatDuration(s) {
     const h = Math.floor(s/3600), m = Math.floor(s/60)%60, sec = Math.floor(s)%60;
