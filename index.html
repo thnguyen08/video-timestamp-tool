@@ -385,8 +385,9 @@
       canvas.height = videoEl.videoHeight;
       previewEmpty.style.display = 'none';
       canvas.style.display = 'block';
-      drawFrame();
       setStatus(`${file.name} · ${videoEl.videoWidth}×${videoEl.videoHeight} · ${formatDuration(videoEl.duration)}`);
+      videoEl.currentTime = 0;
+      videoEl.addEventListener('seeked', drawFrame, { once: true });
     };
   }
 
