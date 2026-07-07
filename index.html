@@ -186,18 +186,83 @@
       align-items: center;
       margin-bottom: 12px;
       flex-wrap: wrap;
-      gap: 8px;
+      gap: 6px;
     }
     .ts-bar span { font-size: 13px; color: var(--muted); }
     .ts-badge {
       font-family: 'Courier New', monospace;
-      font-size: 13px;
+      font-size: 20px;
+      white-space: nowrap;
       background: rgba(0,0,0,0.55);
       border: 1px solid rgba(255,255,255,0.12);
       color: #fff;
       padding: 4px 12px;
       border-radius: 8px;
       letter-spacing: 0.5px;
+    }
+
+    /* Scrubber */
+    .scrubber-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .scrubber-btns { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+    .scrub-btn {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      color: #fff;
+      border-radius: 8px;
+      width: 36px;
+      height: 36px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      padding: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    .scrub-btn:hover { background: rgba(56,189,248,0.25); }
+    .scrub-play { font-size: 13px; }
+    #scrubber {
+      flex: 1;
+      height: 4px;
+      -webkit-appearance: none;
+      appearance: none;
+      background: rgba(148,163,184,0.25);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      padding: 0;
+      border: none;
+      align-self: center;
+      margin: 0;
+    }
+    #scrubber::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: var(--primary);
+      cursor: pointer;
+      margin-top: -5px;
+    }
+    #scrubber::-webkit-slider-runnable-track {
+      height: 4px;
+      border-radius: 2px;
+    }
+    #scrubberTime {
+      align-self: center;
+    }
+    #scrubberTime {
+      font-size: 12px;
+      color: var(--muted);
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums;
     }
 
     /* Progress bar */
@@ -325,6 +390,15 @@
         </div>
         <canvas id="outputCanvas" style="display:none;"></canvas>
       </div>
+      <div class="scrubber-wrap" id="scrubberWrap" style="display:none;">
+        <div class="scrubber-btns">
+          <button id="skipBackBtn" class="scrub-btn" title="-5s">«5</button>
+          <button id="previewPlayBtn" class="scrub-btn scrub-play">▶</button>
+          <button id="skipFwdBtn" class="scrub-btn" title="+5s">5»</button>
+        </div>
+        <input type="range" id="scrubber" min="0" max="1000" value="0" step="1" />
+        <span id="scrubberTime">0:00 / 0:00</span>
+      </div>
     </div>
   </div>
 </main>
@@ -356,6 +430,12 @@
   const progressBar   = document.getElementById('progressBar');
   const statusMsg     = document.getElementById('statusMsg');
   const tsPreview     = document.getElementById('tsPreview');
+  const scrubberWrap   = document.getElementById('scrubberWrap');
+  const scrubber       = document.getElementById('scrubber');
+  const scrubberTime   = document.getElementById('scrubberTime');
+  const previewPlayBtn = document.getElementById('previewPlayBtn');
+  const skipBackBtn    = document.getElementById('skipBackBtn');
+  const skipFwdBtn     = document.getElementById('skipFwdBtn');
 
   // Default date = today
   (function() {
@@ -386,9 +466,76 @@
       previewEmpty.style.display = 'none';
       canvas.style.display = 'block';
       setStatus(`${file.name} · ${videoEl.videoWidth}×${videoEl.videoHeight} · ${formatDuration(videoEl.duration)}`);
-      videoEl.currentTime = 0;
-      videoEl.addEventListener('seeked', drawFrame, { once: true });
+      scrubberWrap.style.display = 'flex';
+      scrubber.value = 0;
+      // Fix WebM duration=Infinity: seek to end to force browser to scan full duration
+      if (!isFinite(videoEl.duration)) {
+        videoEl.addEventListener('seeked', function fixDur() {
+          if (!isFinite(videoEl.duration)) return;
+          videoEl.removeEventListener('seeked', fixDur);
+          videoEl.currentTime = 0;
+          videoEl.addEventListener('seeked', () => { updateScrubberTime(); drawFrame(); }, { once: true });
+        });
+        videoEl.currentTime = 1e9;
+      } else {
+        videoEl.currentTime = 0;
+        videoEl.addEventListener('seeked', () => { updateScrubberTime(); drawFrame(); }, { once: true });
+      }
     };
+  }
+
+  function getEffectiveDuration() {
+    if (isFinite(videoEl.duration) && videoEl.duration > 0) return videoEl.duration;
+    if (videoEl.seekable && videoEl.seekable.length > 0) return videoEl.seekable.end(videoEl.seekable.length - 1);
+    if (videoEl.buffered && videoEl.buffered.length > 0) return videoEl.buffered.end(videoEl.buffered.length - 1);
+    return 0;
+  }
+
+  function updateScrubberTime() {
+    const cur = videoEl.currentTime || 0;
+    const dur = getEffectiveDuration();
+    scrubberTime.textContent = `${formatDuration(cur)} / ${dur > 0 ? formatDuration(dur) : '--:--'}`;
+    const pct = dur > 0 ? cur / dur * 100 : 0;
+    scrubber.value = Math.round(pct * 10);
+    scrubber.style.background = `linear-gradient(to right, var(--primary) ${pct}%, rgba(148,163,184,0.25) ${pct}%)`;
+  }
+
+  // Update seekable range for WebM (duration=Infinity)
+  videoEl.addEventListener('progress', () => { if (!isScrubbing) updateScrubberTime(); });
+  videoEl.addEventListener('durationchange', () => { if (!isScrubbing) updateScrubberTime(); });
+
+  let isScrubbing = false;
+  scrubber.addEventListener('mousedown', () => { isScrubbing = true; });
+  scrubber.addEventListener('touchstart', () => { isScrubbing = true; }, { passive: true });
+  scrubber.addEventListener('input', () => {
+    if (!videoEl.src) return;
+    const dur = getEffectiveDuration();
+    if (!dur) return;
+    const t = (scrubber.value / 1000) * dur;
+    videoEl.currentTime = t;
+    const pct = scrubber.value / 10;
+    scrubber.style.background = `linear-gradient(to right, var(--primary) ${pct}%, rgba(148,163,184,0.25) ${pct}%)`;
+    scrubberTime.textContent = `${formatDuration(t)} / ${formatDuration(dur)}`;
+    videoEl.addEventListener('seeked', drawFrame, { once: true });
+  });
+  scrubber.addEventListener('mouseup',   () => { isScrubbing = false; });
+  scrubber.addEventListener('touchend',  () => { isScrubbing = false; });
+
+  // Preview controls
+  previewPlayBtn.addEventListener('click', () => { playBtn.click(); });
+
+  skipBackBtn.addEventListener('click', () => {
+    videoEl.currentTime = Math.max(0, videoEl.currentTime - 5);
+    if (!isPlaying) videoEl.addEventListener('seeked', drawFrame, { once: true });
+  });
+  skipFwdBtn.addEventListener('click', () => {
+    const dur = getEffectiveDuration();
+    videoEl.currentTime = dur ? Math.min(dur, videoEl.currentTime + 5) : videoEl.currentTime + 5;
+    if (!isPlaying) videoEl.addEventListener('seeked', drawFrame, { once: true });
+  });
+
+  function syncPreviewPlayBtn() {
+    previewPlayBtn.textContent = isPlaying ? '⏸' : '▶';
   }
 
   // Timestamp helpers
@@ -495,6 +642,7 @@
     drawTrackingCode(ctx);
     tsPreview.textContent = ts;
     progressBar.style.width = videoEl.duration ? (videoEl.currentTime / videoEl.duration * 100) + '%' : '0%';
+    if (!isScrubbing) updateScrubberTime();
   }
 
   function renderLoop() {
@@ -505,6 +653,7 @@
       isPlaying = false;
       playBtn.textContent = '▶ Play';
       tsStartWallClock = null;
+      syncPreviewPlayBtn();
     }
   }
 
@@ -526,6 +675,7 @@
       cancelAnimationFrame(rafId);
       drawFrame();
     }
+    syncPreviewPlayBtn();
   });
 
   videoEl.addEventListener('ended', () => {
@@ -533,6 +683,7 @@
     playBtn.textContent = '▶ Play';
     tsStartWallClock = null;
     drawFrame();
+    syncPreviewPlayBtn();
   });
 
   rewindBtn.addEventListener('click', () => {
@@ -724,6 +875,7 @@
   }
 
   function formatDuration(s) {
+    if (!isFinite(s) || isNaN(s)) return '--:--';
     const h = Math.floor(s/3600), m = Math.floor(s/60)%60, sec = Math.floor(s)%60;
     return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : `${m}:${String(sec).padStart(2,'0')}`;
   }
