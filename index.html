@@ -829,7 +829,14 @@
       try {
         setStatus('⏳ Đang tải FFmpeg...');
         const ff = await loadFFmpeg();
-        setStatus('⏳ Đang chuyển đổi sang MP4...');
+        setStatus('⏳ Đang chuyển đổi sang MP4 — 0%');
+        ff.setProgress(({ ratio }) => {
+          if (ratio >= 0 && ratio <= 1) {
+            const pct = Math.round(ratio * 100);
+            progressBar.style.width = pct + '%';
+            setStatus(`⏳ Đang chuyển đổi sang MP4 — ${pct}%`);
+          }
+        });
         const buf = await recordedBlob.arrayBuffer();
         ff.FS('writeFile', 'input.webm', new Uint8Array(buf));
         await ff.run('-i','input.webm','-c:v','libx264','-preset','ultrafast','-crf','23','-movflags','+faststart','-c:a','aac','output.mp4');
