@@ -316,12 +316,42 @@
   <div class="tool-layout">
     <!-- LEFT: Controls -->
     <div class="card">
-      <div class="dropzone" id="uploadZone">
-        <div class="icon">📁</div>
-        <p><strong>Nhấn để chọn video</strong> hoặc kéo thả vào đây</p>
-        <p style="margin-top:5px;font-size:12px;">MP4, WebM, MOV, AVI... · Xử lý cục bộ, không upload server</p>
+      <label>🎥 Chế độ</label>
+      <select id="modeSelect">
+        <option value="single">1 video</option>
+        <option value="dual">2 video (ghép dọc — 2 camera)</option>
+      </select>
+
+      <div id="singleUploadWrap" style="margin-top:14px;">
+        <div class="dropzone" id="uploadZone">
+          <div class="icon">📁</div>
+          <p><strong>Nhấn để chọn video</strong> hoặc kéo thả vào đây</p>
+          <p style="margin-top:5px;font-size:12px;">MP4, WebM, MOV, AVI... · Xử lý cục bộ, không upload server</p>
+        </div>
+        <input type="file" id="fileInput" accept="video/*" />
       </div>
-      <input type="file" id="fileInput" accept="video/*" />
+
+      <div id="dualUploadWrap" style="display:none; margin-top:14px;">
+        <div class="row">
+          <div>
+            <label style="margin-top:0;">🎬 Cam 1 (trên)</label>
+            <div class="dropzone" id="uploadZone1" style="padding:18px 10px;">
+              <div class="icon" style="font-size:1.5rem;">📁</div>
+              <p style="font-size:12px;"><strong>Chọn video Cam 1</strong></p>
+            </div>
+            <input type="file" id="fileInput1" accept="video/*" style="display:none;" />
+          </div>
+          <div>
+            <label style="margin-top:0;">🎬 Cam 2 (dưới)</label>
+            <div class="dropzone" id="uploadZone2" style="padding:18px 10px;">
+              <div class="icon" style="font-size:1.5rem;">📁</div>
+              <p style="font-size:12px;"><strong>Chọn video Cam 2</strong></p>
+            </div>
+            <input type="file" id="fileInput2" accept="video/*" style="display:none;" />
+          </div>
+        </div>
+        <p style="margin-top:8px;font-size:12px;color:var(--muted);">Video sẽ ghép dọc, cắt theo video ngắn hơn. Timestamp/tên/mã vận đơn dùng chung cho cả 2 cam.</p>
+      </div>
 
       <div class="row">
         <div>
@@ -404,18 +434,31 @@
 </main>
 
 <video id="hiddenVideo" style="display:none;" crossorigin="anonymous"></video>
+<video id="hiddenVideo2" style="display:none;" crossorigin="anonymous"></video>
 
 <script>
-  let videoFile = null;
+  let videoFile  = null;
+  let videoFile2 = null;
   let videoEl   = document.getElementById('hiddenVideo');
+  let videoEl2  = document.getElementById('hiddenVideo2');
   let canvas    = document.getElementById('outputCanvas');
   let ctx       = canvas.getContext('2d');
   let rafId     = null;
   let isPlaying = false;
-
+  let mode      = 'single'; // 'single' | 'dual'
+  let dualLayout = null;    // {commonW, h1, h2}
+  const camReady = { 1: false, 2: false };
 
   let tsStartWallClock = null;
   let tsBaseTimeOffset = 0;
+
+  const modeSelect      = document.getElementById('modeSelect');
+  const singleUploadWrap = document.getElementById('singleUploadWrap');
+  const dualUploadWrap   = document.getElementById('dualUploadWrap');
+  const uploadZone1 = document.getElementById('uploadZone1');
+  const fileInput1  = document.getElementById('fileInput1');
+  const uploadZone2 = document.getElementById('uploadZone2');
+  const fileInput2  = document.getElementById('fileInput2');
 
   const uploadZone    = document.getElementById('uploadZone');
   const fileInput     = document.getElementById('fileInput');
@@ -446,7 +489,50 @@
     dateInput.value = `${y}-${m}-${d}`;
   })();
 
-  // Upload
+  // Mode switch
+  modeSelect.addEventListener('change', () => {
+    mode = modeSelect.value;
+    resetAll();
+    if (mode === 'single') {
+      singleUploadWrap.style.display = 'block';
+      dualUploadWrap.style.display   = 'none';
+    } else {
+      singleUploadWrap.style.display = 'none';
+      dualUploadWrap.style.display   = 'block';
+    }
+  });
+
+  function resetAll() {
+    videoEl.pause(); videoEl2.pause();
+    cancelAnimationFrame(rafId);
+    isPlaying = false; tsStartWallClock = null; playBtn.textContent = '▶ Play';
+    videoFile = null; videoFile2 = null;
+    camReady[1] = false; camReady[2] = false;
+    dualLayout = null;
+    videoEl.removeAttribute('src'); videoEl2.removeAttribute('src');
+    canvas.style.display = 'none';
+    previewEmpty.style.display = 'flex';
+    scrubberWrap.style.display = 'none';
+    progressBar.style.width = '0%';
+    setStatus('');
+  }
+
+  function primeVideoDuration(ve, cb) {
+    if (!isFinite(ve.duration)) {
+      ve.addEventListener('seeked', function fixDur() {
+        if (!isFinite(ve.duration)) return;
+        ve.removeEventListener('seeked', fixDur);
+        ve.currentTime = 0;
+        ve.addEventListener('seeked', cb, { once: true });
+      });
+      ve.currentTime = 1e9;
+    } else {
+      ve.currentTime = 0;
+      ve.addEventListener('seeked', cb, { once: true });
+    }
+  }
+
+  // Upload (single mode)
   uploadZone.addEventListener('click', () => fileInput.click());
   uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('drag-over'); });
   uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
@@ -468,32 +554,75 @@
       setStatus(`${file.name} · ${videoEl.videoWidth}×${videoEl.videoHeight} · ${formatDuration(videoEl.duration)}`);
       scrubberWrap.style.display = 'flex';
       scrubber.value = 0;
-      // Fix WebM duration=Infinity: seek to end to force browser to scan full duration
-      if (!isFinite(videoEl.duration)) {
-        videoEl.addEventListener('seeked', function fixDur() {
-          if (!isFinite(videoEl.duration)) return;
-          videoEl.removeEventListener('seeked', fixDur);
-          videoEl.currentTime = 0;
-          videoEl.addEventListener('seeked', () => { updateScrubberTime(); drawFrame(); }, { once: true });
-        });
-        videoEl.currentTime = 1e9;
-      } else {
-        videoEl.currentTime = 0;
-        videoEl.addEventListener('seeked', () => { updateScrubberTime(); drawFrame(); }, { once: true });
-      }
+      primeVideoDuration(videoEl, () => { updateScrubberTime(); drawFrame(); });
     };
   }
 
-  function getEffectiveDuration() {
-    if (isFinite(videoEl.duration) && videoEl.duration > 0) return videoEl.duration;
-    if (videoEl.seekable && videoEl.seekable.length > 0) return videoEl.seekable.end(videoEl.seekable.length - 1);
-    if (videoEl.buffered && videoEl.buffered.length > 0) return videoEl.buffered.end(videoEl.buffered.length - 1);
+  // Upload (dual mode)
+  function wireDualZone(zone, input, cam) {
+    zone.addEventListener('click', () => input.click());
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault(); zone.classList.remove('drag-over');
+      if (e.dataTransfer.files[0]) loadDualFile(e.dataTransfer.files[0], cam);
+    });
+    input.addEventListener('change', () => { if (input.files[0]) loadDualFile(input.files[0], cam); });
+  }
+  wireDualZone(uploadZone1, fileInput1, 1);
+  wireDualZone(uploadZone2, fileInput2, 2);
+
+  function loadDualFile(file, cam) {
+    const ve = cam === 1 ? videoEl : videoEl2;
+    if (cam === 1) videoFile = file; else videoFile2 = file;
+    camReady[cam] = false;
+    ve.src = URL.createObjectURL(file);
+    ve.load();
+    ve.onloadedmetadata = () => {
+      primeVideoDuration(ve, () => {
+        camReady[cam] = true;
+        (cam === 1 ? uploadZone1 : uploadZone2).querySelector('p').innerHTML = `<strong>${file.name}</strong>`;
+        if (camReady[1] && camReady[2]) initDualPreview();
+      });
+    };
+  }
+
+  function initDualPreview() {
+    const commonW = Math.max(videoEl.videoWidth, videoEl2.videoWidth);
+    const h1 = Math.round(videoEl.videoHeight  * (commonW / videoEl.videoWidth));
+    const h2 = Math.round(videoEl2.videoHeight * (commonW / videoEl2.videoWidth));
+    dualLayout = { commonW, h1, h2 };
+    canvas.width  = commonW;
+    canvas.height = h1 + h2;
+    previewEmpty.style.display = 'none';
+    canvas.style.display = 'block';
+    scrubberWrap.style.display = 'flex';
+    scrubber.value = 0;
+    const dur = getTotalDuration();
+    setStatus(`Cam1: ${videoEl.videoWidth}×${videoEl.videoHeight} · Cam2: ${videoEl2.videoWidth}×${videoEl2.videoHeight} · Ghép: ${commonW}×${h1+h2} · ${formatDuration(dur)}`);
+    updateScrubberTime();
+    drawFrame();
+  }
+
+  function getEffectiveDuration(v) {
+    v = v || videoEl;
+    if (isFinite(v.duration) && v.duration > 0) return v.duration;
+    if (v.seekable && v.seekable.length > 0) return v.seekable.end(v.seekable.length - 1);
+    if (v.buffered && v.buffered.length > 0) return v.buffered.end(v.buffered.length - 1);
     return 0;
+  }
+
+  function getTotalDuration() {
+    if (mode === 'dual' && videoFile2) {
+      const d1 = getEffectiveDuration(videoEl), d2 = getEffectiveDuration(videoEl2);
+      return (d1 > 0 && d2 > 0) ? Math.min(d1, d2) : (d1 || d2);
+    }
+    return getEffectiveDuration(videoEl);
   }
 
   function updateScrubberTime() {
     const cur = videoEl.currentTime || 0;
-    const dur = getEffectiveDuration();
+    const dur = getTotalDuration();
     scrubberTime.textContent = `${formatDuration(cur)} / ${dur > 0 ? formatDuration(dur) : '--:--'}`;
     const pct = dur > 0 ? cur / dur * 100 : 0;
     scrubber.value = Math.round(pct * 10);
@@ -509,10 +638,11 @@
   scrubber.addEventListener('touchstart', () => { isScrubbing = true; }, { passive: true });
   scrubber.addEventListener('input', () => {
     if (!videoEl.src) return;
-    const dur = getEffectiveDuration();
+    const dur = getTotalDuration();
     if (!dur) return;
     const t = (scrubber.value / 1000) * dur;
     videoEl.currentTime = t;
+    if (mode === 'dual' && videoEl2.src) videoEl2.currentTime = t;
     const pct = scrubber.value / 10;
     scrubber.style.background = `linear-gradient(to right, var(--primary) ${pct}%, rgba(148,163,184,0.25) ${pct}%)`;
     scrubberTime.textContent = `${formatDuration(t)} / ${formatDuration(dur)}`;
@@ -525,12 +655,16 @@
   previewPlayBtn.addEventListener('click', () => { playBtn.click(); });
 
   skipBackBtn.addEventListener('click', () => {
-    videoEl.currentTime = Math.max(0, videoEl.currentTime - 5);
+    const t = Math.max(0, videoEl.currentTime - 5);
+    videoEl.currentTime = t;
+    if (mode === 'dual' && videoEl2.src) videoEl2.currentTime = t;
     if (!isPlaying) videoEl.addEventListener('seeked', drawFrame, { once: true });
   });
   skipFwdBtn.addEventListener('click', () => {
-    const dur = getEffectiveDuration();
-    videoEl.currentTime = dur ? Math.min(dur, videoEl.currentTime + 5) : videoEl.currentTime + 5;
+    const dur = getTotalDuration();
+    const t = dur ? Math.min(dur, videoEl.currentTime + 5) : videoEl.currentTime + 5;
+    videoEl.currentTime = t;
+    if (mode === 'dual' && videoEl2.src) videoEl2.currentTime = t;
     if (!isPlaying) videoEl.addEventListener('seeked', drawFrame, { once: true });
   });
 
@@ -562,7 +696,8 @@
     return `${date} ${h}:${m}:${s}`;
   }
 
-  function drawTimestamp(ctx, ts) {
+  function drawTimestamp(ctx, ts, area) {
+    area = area || { x: 0, y: 0, w: canvas.width, h: canvas.height };
     const fontSize = parseInt(fontSizeInput.value) || 22;
     const pos    = positionSelect.value;
     const margin = Math.round(fontSize * 0.4);
@@ -574,10 +709,10 @@
     const textH = fontSize;
 
     let x, y;
-    if (pos === 'top-left')     { x = margin;                        y = margin; }
-    if (pos === 'top-right')    { x = canvas.width - textW - margin; y = margin; }
-    if (pos === 'bottom-left')  { x = margin;                        y = canvas.height - textH - margin; }
-    if (pos === 'bottom-right') { x = canvas.width - textW - margin; y = canvas.height - textH - margin; }
+    if (pos === 'top-left')     { x = area.x + margin;                  y = area.y + margin; }
+    if (pos === 'top-right')    { x = area.x + area.w - textW - margin; y = area.y + margin; }
+    if (pos === 'bottom-left')  { x = area.x + margin;                  y = area.y + area.h - textH - margin; }
+    if (pos === 'bottom-right') { x = area.x + area.w - textW - margin; y = area.y + area.h - textH - margin; }
 
     ctx.save();
     ctx.lineJoin      = 'round';
@@ -592,13 +727,14 @@
     ctx.letterSpacing = '0px';
   }
 
-  function drawPackerName(ctx) {
+  function drawPackerName(ctx, area) {
+    area = area || { x: 0, y: 0, w: canvas.width, h: canvas.height };
     const name = document.getElementById('packerName').value.trim();
     if (!name) return;
     const fontSize = parseInt(fontSizeInput.value) || 22;
     const margin   = Math.round(fontSize * 0.4);
-    const x = margin;
-    const y = canvas.height - fontSize - margin;
+    const x = area.x + margin;
+    const y = area.y + area.h - fontSize - margin;
 
     ctx.font          = `300 ${fontSize}px Tahoma, Verdana, sans-serif`;
     ctx.letterSpacing = '2.0px';
@@ -616,7 +752,8 @@
     ctx.letterSpacing = '0px';
   }
 
-  function drawTrackingCode(ctx) {
+  function drawTrackingCode(ctx, area) {
+    area = area || { x: 0, y: 0, w: canvas.width, h: canvas.height };
     const code = document.getElementById('trackingCode').value.trim();
     if (!code) return;
     const fontSize = Math.round((parseInt(fontSizeInput.value) || 22) * 1.05);
@@ -625,8 +762,8 @@
     const textW = ctx.measureText(code).width;
     const boxW  = textW + padding.x * 2;
     const boxH  = fontSize + padding.y * 2;
-    const x = canvas.width  - boxW;
-    const y = canvas.height - boxH;
+    const x = area.x + area.w - boxW;
+    const y = area.y + area.h - boxH;
     ctx.fillStyle = '#FFEE00';
     ctx.fillRect(x, y, boxW, boxH);
     ctx.fillStyle    = '#000000';
@@ -635,25 +772,45 @@
   }
 
   function drawFrame() {
-    ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
     const ts = getCurrentTimestamp();
-    drawTimestamp(ctx, ts);
-    drawPackerName(ctx);
-    drawTrackingCode(ctx);
+    if (mode === 'dual' && dualLayout) {
+      const { commonW, h1, h2 } = dualLayout;
+      ctx.drawImage(videoEl,  0, 0,  commonW, h1);
+      ctx.drawImage(videoEl2, 0, h1, commonW, h2);
+      const area1 = { x: 0, y: 0,  w: commonW, h: h1 };
+      const area2 = { x: 0, y: h1, w: commonW, h: h2 };
+      drawTimestamp(ctx, ts, area1); drawPackerName(ctx, area1); drawTrackingCode(ctx, area1);
+      drawTimestamp(ctx, ts, area2); drawPackerName(ctx, area2); drawTrackingCode(ctx, area2);
+    } else {
+      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+      drawTimestamp(ctx, ts);
+      drawPackerName(ctx);
+      drawTrackingCode(ctx);
+    }
     tsPreview.textContent = ts;
-    progressBar.style.width = videoEl.duration ? (videoEl.currentTime / videoEl.duration * 100) + '%' : '0%';
+    const dur = getTotalDuration();
+    progressBar.style.width = dur ? (videoEl.currentTime / dur * 100) + '%' : '0%';
     if (!isScrubbing) updateScrubberTime();
+  }
+
+  function stopPlayback() {
+    videoEl.pause();
+    if (mode === 'dual') videoEl2.pause();
+    isPlaying = false;
+    playBtn.textContent = '▶ Play';
+    tsStartWallClock = null;
+    syncPreviewPlayBtn();
   }
 
   function renderLoop() {
     drawFrame();
-    if (!videoEl.paused && !videoEl.ended) {
+    const dur = getTotalDuration();
+    const reachedEnd = videoEl.ended || (mode === 'dual' && videoEl2.ended) ||
+      (dur > 0 && videoEl.currentTime >= dur - 0.03);
+    if (!videoEl.paused && !reachedEnd) {
       rafId = requestAnimationFrame(renderLoop);
     } else {
-      isPlaying = false;
-      playBtn.textContent = '▶ Play';
-      tsStartWallClock = null;
-      syncPreviewPlayBtn();
+      stopPlayback();
     }
   }
 
@@ -664,32 +821,27 @@
       tsBaseTimeOffset = (parsed !== null ? parsed : 0) + videoEl.currentTime;
       tsStartWallClock = Date.now();
       videoEl.play();
+      if (mode === 'dual') videoEl2.play();
       isPlaying = true;
       playBtn.textContent = '⏸ Pause';
       rafId = requestAnimationFrame(renderLoop);
     } else {
-      videoEl.pause();
-      isPlaying = false;
-      playBtn.textContent = '▶ Play';
-      tsStartWallClock = null;
       cancelAnimationFrame(rafId);
+      stopPlayback();
       drawFrame();
     }
     syncPreviewPlayBtn();
   });
 
-  videoEl.addEventListener('ended', () => {
-    isPlaying = false;
-    playBtn.textContent = '▶ Play';
-    tsStartWallClock = null;
-    drawFrame();
-    syncPreviewPlayBtn();
-  });
+  videoEl.addEventListener('ended', () => { if (isPlaying) stopPlayback(); drawFrame(); });
+  videoEl2.addEventListener('ended', () => { if (isPlaying) stopPlayback(); drawFrame(); });
 
   rewindBtn.addEventListener('click', () => {
     videoEl.pause(); videoEl.currentTime = 0;
+    if (mode === 'dual') { videoEl2.pause(); videoEl2.currentTime = 0; }
     isPlaying = false; playBtn.textContent = '▶ Play'; tsStartWallClock = null;
     cancelAnimationFrame(rafId); drawFrame();
+    syncPreviewPlayBtn();
   });
 
   // Auto-format HH:MM:SS
@@ -748,8 +900,8 @@
 
   // Export
   exportBtn.addEventListener('click', async () => {
-    if (!videoFile) return;
-    videoEl.pause(); cancelAnimationFrame(rafId);
+    if (!videoFile || (mode === 'dual' && !videoFile2)) return;
+    videoEl.pause(); videoEl2.pause(); cancelAnimationFrame(rafId);
     isPlaying = false; tsStartWallClock = null; playBtn.textContent = '▶ Play';
     exportBtn.disabled = true; playBtn.disabled = true;
 
@@ -767,17 +919,28 @@
 
     videoEl.muted = true; videoEl.currentTime = 0;
     await new Promise(r => videoEl.addEventListener('seeked', r, { once: true }));
+    if (mode === 'dual') {
+      videoEl2.muted = true; videoEl2.currentTime = 0;
+      await new Promise(r => videoEl2.addEventListener('seeked', r, { once: true }));
+    }
 
     const parsed  = parseStartTime(startTimeInput.value);
     const baseOff = parsed !== null ? parsed : 0;
     const date    = dateInput.value || '----.--.--';
+    const exportDur = getTotalDuration();
 
     const chunks   = [];
     const stream   = canvas.captureStream(30);
     const recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
     recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
-    let exportPct = 0;
+    let exportEnding = false;
+    function finishExport() {
+      if (exportEnding) return;
+      exportEnding = true;
+      videoEl.pause(); if (mode === 'dual') videoEl2.pause();
+      setTimeout(() => { if (recorder.state === 'recording') recorder.stop(); }, 200);
+    }
 
     function drawExportFrame(now, metadata) {
       const videoTime = metadata ? metadata.mediaTime : videoEl.currentTime;
@@ -786,16 +949,33 @@
       const m = String(Math.floor(totalSec/60)%60).padStart(2,'0');
       const s = String(Math.floor(totalSec)%60).padStart(2,'0');
       const ts = `${date} ${h}:${m}:${s}`;
-      ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
-      drawTimestamp(ctx, ts); drawPackerName(ctx); drawTrackingCode(ctx);
+
+      if (mode === 'dual' && dualLayout) {
+        const { commonW, h1, h2 } = dualLayout;
+        ctx.drawImage(videoEl,  0, 0,  commonW, h1);
+        ctx.drawImage(videoEl2, 0, h1, commonW, h2);
+        const area1 = { x: 0, y: 0,  w: commonW, h: h1 };
+        const area2 = { x: 0, y: h1, w: commonW, h: h2 };
+        drawTimestamp(ctx, ts, area1); drawPackerName(ctx, area1); drawTrackingCode(ctx, area1);
+        drawTimestamp(ctx, ts, area2); drawPackerName(ctx, area2); drawTrackingCode(ctx, area2);
+      } else {
+        ctx.drawImage(videoEl, 0, 0, canvas.width, canvas.height);
+        drawTimestamp(ctx, ts); drawPackerName(ctx); drawTrackingCode(ctx);
+      }
       tsPreview.textContent = ts;
-      if (!videoEl.ended) videoEl.requestVideoFrameCallback(drawExportFrame);
+
+      const reachedEnd = videoEl.ended || (mode === 'dual' && videoEl2.ended) ||
+        (exportDur > 0 && videoTime >= exportDur - 0.03);
+      if (reachedEnd) { finishExport(); return; }
+      videoEl.requestVideoFrameCallback(drawExportFrame);
     }
 
-    const videoDur = videoEl.duration; // giây
+    const videoDur = exportDur; // giây
     const recordedBlob = await new Promise(resolve => {
       recorder.onstop = () => { clearInterval(uiTimer); resolve(new Blob(chunks, { type: mimeType })); };
-      videoEl.addEventListener('ended', () => setTimeout(() => recorder.stop(), 200), { once: true });
+      // rVFC ngừng bắn callback ngay khi video 'ended' → cần lưới an toàn này để chắc chắn dừng recorder
+      videoEl.addEventListener('ended', finishExport, { once: true });
+      if (mode === 'dual') videoEl2.addEventListener('ended', finishExport, { once: true });
 
       setStatus('⏳ Đang render — 0%');
       const startMs = Date.now();
@@ -816,6 +996,7 @@
       recorder.start(100); videoEl.playbackRate = 1;
       videoEl.requestVideoFrameCallback(drawExportFrame);
       videoEl.play();
+      if (mode === 'dual') { videoEl2.playbackRate = 1; videoEl2.play(); }
     });
 
     progressBar.style.width = '100%';
