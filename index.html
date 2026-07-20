@@ -242,6 +242,7 @@
       align-self: center;
       margin: 0;
     }
+    #scrubber:disabled { opacity: 0.4; cursor: not-allowed; }
     #scrubber::-webkit-slider-thumb {
       -webkit-appearance: none;
       width: 14px;
@@ -447,6 +448,7 @@
   let isPlaying = false;
   let mode      = 'single'; // 'single' | 'dual'
   let dualLayout = null;    // {commonW, h1, h2}
+  let lastExport = null;    // { blob, ext, videoFile, videoFile2, mode } — cache để tránh render lại khi bấm Xuất lần nữa
   const camReady = { 1: false, 2: false };
 
   let tsStartWallClock = null;
@@ -509,6 +511,7 @@
     videoFile = null; videoFile2 = null;
     camReady[1] = false; camReady[2] = false;
     dualLayout = null;
+    lastExport = null;
     videoEl.removeAttribute('src'); videoEl2.removeAttribute('src');
     canvas.style.display = 'none';
     previewEmpty.style.display = 'flex';
@@ -544,6 +547,7 @@
 
   function loadFile(file) {
     videoFile = file;
+    lastExport = null;
     videoEl.src = URL.createObjectURL(file);
     videoEl.load();
     videoEl.onloadedmetadata = () => {
@@ -575,6 +579,7 @@
   function loadDualFile(file, cam) {
     const ve = cam === 1 ? videoEl : videoEl2;
     if (cam === 1) videoFile = file; else videoFile2 = file;
+    lastExport = null;
     camReady[cam] = false;
     ve.src = URL.createObjectURL(file);
     ve.load();
@@ -899,11 +904,28 @@
   document.getElementById('trackingCode').addEventListener('input', () => { if (!isPlaying) drawFrame(); });
 
   // Export
+  function setExportLock(locked) {
+    exportBtn.disabled = locked;
+    playBtn.disabled = locked;
+    rewindBtn.disabled = locked;
+    scrubber.disabled = locked;
+    skipBackBtn.disabled = locked;
+    skipFwdBtn.disabled = locked;
+    previewPlayBtn.disabled = locked;
+  }
+
   exportBtn.addEventListener('click', async () => {
     if (!videoFile || (mode === 'dual' && !videoFile2)) return;
+
+    // Đã render sẵn cho đúng video/chế độ hiện tại (vd. lần trước bấm Hủy ở hộp thoại lưu) → tải lại luôn, không render lại
+    if (lastExport && lastExport.videoFile === videoFile && lastExport.videoFile2 === videoFile2 && lastExport.mode === mode) {
+      downloadBlob(lastExport.blob, lastExport.ext);
+      return;
+    }
+
     videoEl.pause(); videoEl2.pause(); cancelAnimationFrame(rafId);
     isPlaying = false; tsStartWallClock = null; playBtn.textContent = '▶ Play';
-    exportBtn.disabled = true; playBtn.disabled = true;
+    setExportLock(true);
 
     // Thử native MP4 trước, nếu không được thì dùng WebM + FFmpeg convert
     const nativeMp4 = ['video/mp4;codecs=avc1.42E01E','video/mp4;codecs=avc1','video/mp4;codecs=h264','video/mp4']
@@ -914,7 +936,7 @@
 
     if (!mimeType) {
       setStatus('⚠️ Trình duyệt không hỗ trợ xuất video. Vui lòng dùng Chrome.');
-      exportBtn.disabled = false; playBtn.disabled = false; return;
+      setExportLock(false); return;
     }
 
     videoEl.muted = true; videoEl.currentTime = 0;
@@ -963,6 +985,7 @@
         drawTimestamp(ctx, ts); drawPackerName(ctx); drawTrackingCode(ctx);
       }
       tsPreview.textContent = ts;
+      updateScrubberTime();
 
       const reachedEnd = videoEl.ended || (mode === 'dual' && videoEl2.ended) ||
         (exportDur > 0 && videoTime >= exportDur - 0.03);
@@ -1002,9 +1025,10 @@
     progressBar.style.width = '100%';
     videoEl.playbackRate = 1;
 
+    let finalBlob;
     if (nativeMp4) {
       // Browser hỗ trợ MP4 trực tiếp
-      downloadBlob(recordedBlob, 'mp4');
+      finalBlob = recordedBlob;
     } else {
       // Convert WebM → MP4 bằng FFmpeg.wasm
       try {
@@ -1023,14 +1047,16 @@
         await ff.run('-i','input.webm','-c:v','libx264','-preset','ultrafast','-crf','23','-movflags','+faststart','-c:a','aac','output.mp4');
         const data = ff.FS('readFile', 'output.mp4');
         ff.FS('unlink','input.webm'); ff.FS('unlink','output.mp4');
-        downloadBlob(new Blob([data.buffer], { type: 'video/mp4' }), 'mp4');
+        finalBlob = new Blob([data.buffer], { type: 'video/mp4' });
       } catch(e) {
         setStatus('❌ Lỗi chuyển đổi MP4: ' + e.message);
-        exportBtn.disabled = false; playBtn.disabled = false; return;
+        setExportLock(false); return;
       }
     }
 
-    exportBtn.disabled = false; playBtn.disabled = false;
+    lastExport = { blob: finalBlob, ext: 'mp4', videoFile, videoFile2, mode };
+    downloadBlob(finalBlob, 'mp4');
+    setExportLock(false);
   });
 
   async function loadFFmpeg() {
@@ -1054,8 +1080,10 @@
   function downloadBlob(blob, ext) {
     const sizeMB = (blob.size / 1024 / 1024).toFixed(1);
     const url = URL.createObjectURL(blob);
+    const code = document.getElementById('trackingCode').value.trim().replace(/[^a-zA-Z0-9_-]/g, '');
+    const filename = code ? `${code}.${ext}` : `video_timestamp_${Date.now()}.${ext}`;
     const a = document.createElement('a');
-    a.href = url; a.download = `video_timestamp_${Date.now()}.${ext}`; a.click();
+    a.href = url; a.download = filename; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
     setStatus(blob.size > 20*1024*1024
       ? `✅ Xuất xong! ${sizeMB} MB ⚠️ Vượt 20MB — video quá dài, hãy cắt ngắn.`
