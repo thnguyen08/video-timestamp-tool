@@ -630,6 +630,15 @@
     return (bytes / 1024 / 1024).toFixed(1) + ' MB';
   }
 
+  function truncateFilename(name, maxLen) {
+    if (name.length <= maxLen) return name;
+    const dot = name.lastIndexOf('.');
+    const ext = dot > -1 ? name.slice(dot) : '';
+    const base = dot > -1 ? name.slice(0, dot) : name;
+    const keep = Math.max(4, maxLen - ext.length - 1);
+    return base.slice(0, keep) + '…' + ext;
+  }
+
   function primeVideoDuration(ve, cb) {
     if (!isFinite(ve.duration)) {
       ve.addEventListener('seeked', function fixDur() {
@@ -659,7 +668,7 @@
     videoFile = file;
     lastExport = null;
     const ps = uploadZone.querySelectorAll('p');
-    ps[0].innerHTML = `✅ <strong>${file.name}</strong>`;
+    ps[0].innerHTML = `✅ <strong title="${file.name}">${truncateFilename(file.name, 36)}</strong>`;
     ps[1].textContent = `${formatFileSize(file.size)} · Nhấn để chọn video khác`;
     videoEl.src = URL.createObjectURL(file);
     videoEl.load();
@@ -700,7 +709,7 @@
       primeVideoDuration(ve, () => {
         camReady[cam] = true;
         (cam === 1 ? uploadZone1 : uploadZone2).querySelector('p').innerHTML =
-          `✅ <strong>${file.name}</strong><br>${formatFileSize(file.size)}`;
+          `✅ <strong title="${file.name}">${truncateFilename(file.name, 20)}</strong><br>${formatFileSize(file.size)}`;
         if (camReady[1] && camReady[2]) initDualPreview();
       });
     };
