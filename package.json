@@ -1,0 +1,38 @@
+{
+  "name": "video-timestamp-overlay",
+  "version": "1.0.0",
+  "description": "Thêm timestamp, tên người đóng gói và mã vận đơn vào video",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder"
+  },
+  "author": "thnguyen08",
+  "license": "ISC",
+  "devDependencies": {
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.thnguyen08.videotimestamp",
+    "productName": "Video Timestamp Overlay",
+    "files": [
+      "index.html",
+      "main.js",
+      "preload.js"
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.video"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": ["nsis", "portable"]
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "target": ["AppImage"]
+    }
+  }
+}
